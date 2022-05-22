@@ -19,12 +19,14 @@ async function getDirData(dir){
     files = await fs.promises.readdir(path.join(__dirname, dir), {withFileTypes: true});
   } catch (err) {
     console.error('Could not open directory: ', err);
+    process.exit(1);
   }
   let stats = [];
   try {
     stats = await Promise.all(files.map((file) => fs.promises.stat(path.join(__dirname, dir, file.name))));
   } catch (err) {
     console.error('Could not get stats for file: ', err);
+    process.exit(2);
   }
   stats.forEach((stat, index) => {
     if (stat.isFile()) {
