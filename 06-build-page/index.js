@@ -2,10 +2,14 @@
 const fs = require('fs');
 const path = require('path');
 
+const colors = {
+  fgYellow: '\x1b[33m',
+  reset: '\x1b[0m'
+};
+
 async function copyDir(from, to, topLevel = true) {
   let files = [];
-  if (topLevel)
-    await fs.promises.mkdir(to, {recursive: true});
+  await fs.promises.mkdir(to, {recursive: true});
   try {
     files = await fs.promises.readdir(from, {withFileTypes: true});
   } catch (err) {
@@ -16,7 +20,6 @@ async function copyDir(from, to, topLevel = true) {
   await Promise.all(files.map(x => x[2] ? copyDir(x[1], path.join(to, x[0]), false) : fs.promises.copyFile(x[1], path.join(to, x[0]))));
   if (topLevel)
     console.log('-> Assets have been copied.');
-
 }
 
 async function bundleCss(from, to) {
@@ -53,16 +56,22 @@ async function bundleCss(from, to) {
 async function replaceTemplateRefs(template) {
   const regex = /{{([\s\S]+?)}}/g;
   const promises = [];
+  const matches = [];
   template.replace(regex, (match, p1) => {
-    try {
-      promises.push(fs.promises.readFile(path.join(__dirname, 'components', p1 + '.html')));
-      return match;
-    } catch (err) {
-      console.error(`Could not read template file (Maybe template name contains errors?) [${err}]`);
-    }
+    promises.push(fs.promises.readFile(path.join(__dirname, 'components', p1 + '.html')));
+    matches.push(p1);
+    return match;
   });
-  const replacements = await Promise.all(promises);
+  let replacements = await Promise.allSettled(promises);
+  replacements = replacements.map((x, index) => {
+    if (x.status === 'rejected') {
+      console.error(`${colors.fgYellow}Warning: Could not read template file ${matches[index]}${colors.reset}`);
+      return '{{' + matches[index] + '}}';
+    }
+    else return x.value;
+  });
   return template.replace(regex, () => replacements.shift());
+
 }
 
 async function buildHtml(template, destination) {
@@ -74,11 +83,13 @@ async function buildHtml(template, destination) {
 
 async function buildApp() {
   const targetPath = path.join(__dirname, 'project-dist');
-  // execute simultaneously via all
-  await fs.promises.mkdir(targetPath, {recursive: true});
-  await copyDir(path.join(__dirname, 'assets'), path.join(targetPath, 'assets'));
-  await bundleCss(path.join(__dirname, 'styles'), path.join(targetPath, 'style.css'));
-  await buildHtml(path.join(__dirname, 'template.html'), path.join(targetPath, 'index.html'));
+  const promises = [
+    fs.promises.mkdir(targetPath, {recursive: true}),
+    copyDir(path.join(__dirname, 'assets'), path.join(targetPath, 'assets')),
+    bundleCss(path.join(__dirname, 'styles'), path.join(targetPath, 'style.css')),
+    buildHtml(path.join(__dirname, 'template.html'), path.join(targetPath, 'index.html'))
+  ];
+  await Promise.all(promises);
   console.log('Build complete.');
 }
 
