@@ -9,6 +9,11 @@ const colors = {
 
 async function copyDir(from, to, topLevel = true) {
   let files = [];
+  try {
+    await fs.promises.rm(to, {recursive: true});
+  } catch (err) {
+    // Doing nothing here, it's okay if there is no target folder
+  }
   await fs.promises.mkdir(to, {recursive: true});
   try {
     files = await fs.promises.readdir(from, {withFileTypes: true});
